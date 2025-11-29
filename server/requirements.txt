@@ -1,0 +1,6 @@
+flask==3.1.2
+flask-socketio==5.5.1
+flask-sqlalchemy==3.1.1
+bcrypt==5.0.0
+python-socketio==5.15.0
+eventlet==0.40.4

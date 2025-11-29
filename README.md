@@ -155,4 +155,4 @@ chatroom/
 
 ## Authors
 
-[Your names here]
+[Dat Luan Lu, Maxim Orechnikov]

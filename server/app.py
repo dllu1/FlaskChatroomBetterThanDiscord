@@ -7,7 +7,7 @@ This module implements the main Flask-SocketIO server that handles user authenti
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit, disconnect
 import bcrypt
-import eventlet
+import gevent
 
 from database import db, init_database
 from models import User, Messages
@@ -17,8 +17,8 @@ from models import User, Messages
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'super_duper_secret_key'
 
-# Initialize SocketIO with eventlet for async support
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+# Initialize SocketIO with gevent for async support
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode=gevent)
 
 # Initialize database
 init_database(app)

@@ -270,5 +270,5 @@ def internal_error(error):
 """Main entry point"""
 if __name__ == '__main__':
     print("Starting Terminal Chatroom Server")
-    print("Server running on http://localhost:5000")
-    socketio.run(app, host='0.0.0.0', post=5000, debug=True)
+    print("Server running on http://localhost:5050")
+    socketio.run(app, host='0.0.0.0', post=5050, debug=True)

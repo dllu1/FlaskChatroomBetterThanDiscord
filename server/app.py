@@ -18,7 +18,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'super_duper_secret_key'
 
 # Initialize SocketIO with eventlet for async support
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode=eventlet)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 # Initialize database
 init_database(app)

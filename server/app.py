@@ -131,7 +131,7 @@ def login():
         if not bcrypt.checkpw(password.encode('utf-8'),  User.password_hash.encode('utf-8')):
             return jsonify({
                 'Success': False,
-                'message': 'Username is not correct or not exist'
+                'message': 'Password does not match'
             }), 401
 
         return jsonify({

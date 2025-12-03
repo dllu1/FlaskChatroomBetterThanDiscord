@@ -161,10 +161,10 @@ This application implements comprehensive error handling to ensure graceful oper
 
 | Error Type | How It's Handled |
 |------------|------------------|
-| Invalid JSON data | Returns 400 status with "No data provided" message |
+| Invalid JSON data | Returns 400 status with "Missing data" message |
 | Empty username/password | Returns 400 status with "Username and password are required" |
 | Duplicate username | Returns 409 status with "Username already exists" |
-| Invalid credentials | Returns 401 status with "Invalid username or password" |
+| Invalid credentials | Returns 401 status with "Username does not exist" or "Password does not match" |
 | Database errors | Rolls back transaction and returns 500 status with error details |
 | 404 Not Found | Returns JSON error instead of HTML page |
 | 500 Internal Error | Rolls back database and returns JSON error |

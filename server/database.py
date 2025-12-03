@@ -11,7 +11,7 @@ from flask_sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
 
-def init_db(app):
+def init_database(app):
     """
     Initialize the database with the Flask application.
 

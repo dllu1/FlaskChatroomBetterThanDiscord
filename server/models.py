@@ -5,7 +5,7 @@ This module defines the User and Message models used to store
 user credentials and chat messages in the database.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from database import db
 
 
@@ -23,7 +23,7 @@ class User(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
+    password = db.Column(db.String(255), nullable=False)
 
     def __repr__(self):
         """Return string representation of User."""
@@ -42,7 +42,7 @@ class User(db.Model):
         }
 
 
-class Message(db.Model):
+class Messages(db.Model):
     """
     Message model for storing chat messages.
 
@@ -58,7 +58,7 @@ class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     username = db.Column(db.String(50), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
     def __repr__(self):
         """Return string representation of Message."""

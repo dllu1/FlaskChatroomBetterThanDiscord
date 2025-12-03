@@ -1,229 +1,221 @@
 """
-Chatroom Server Application.
-
-This module implements the main Flask-SocketIO server that handles user authentication and real-time message broadcasting.
+Flask SocketIO Chat Server.
+Handles user authentication and real-time messaging.
 """
 
+import logging
 from flask import Flask, request, jsonify
-from flask_socketio import SocketIO, emit, disconnect
+from flask_socketio import SocketIO, emit
 import bcrypt
-import gevent
 
-from database import db, init_database
-from models import User, Messages
+from database import db, init_database, check_database_connection
+from models import User, Message
 
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'super_duper_secret_key'
+app.config['SECRET_KEY'] = 'chat_secret_key_123'
 
-# Initialize SocketIO with gevent for async support
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode=gevent)
+# Initialize SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Initialize database
 init_database(app)
 
-# Store connect users: {session_id: username}
-connect_users = {}
+# Store connected users
+connected_users = {}  # {session_id: username}
 
-"""
-Authentication route
-"""
 
-@app.route('/register', methods=['POST'])
-def register():
+def validate_json_request(required_fields):
     """
-        Register a new user account.
+    Validate JSON request data (DRY principle).
 
-        Expected JSON body:
-            - username: Unique username (string)
-            - password: User password (string)
+    Args:
+        required_fields: List of required field names
 
-        Returns:
-            JSON response with success status or error message
+    Returns:
+        tuple: (data, error_response, status_code)
     """
     try:
         data = request.get_json()
-
-        # Validate input from user
         if not data:
-            return jsonify({'Success': False, 'message': 'Missing data'}), 400
+            return None, {'error': 'No data provided'}, 400
 
-        username = data.get('username', '').script()
-        password = data.get('password', '')
+        for field in required_fields:
+            if field not in data or not str(data[field]).strip():
+                return None, {'error': f'Missing or empty field: {field}'}, 400
 
-        # Check for empty data
-        if not username or not password:
+        return data, None, None
+
+    except Exception as e:
+        logger.error(f"Request validation failed: {e}")
+        return None, {'error': 'Invalid JSON data'}, 400
+
+
+# ==================== HTTP Routes ====================
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint."""
+    try:
+        if check_database_connection():
             return jsonify({
-                'Success': False,
-                'message': 'Username and password are required'
-            }), 400
+                'status': 'healthy',
+                'database': 'connected',
+                'online_users': len(connected_users)
+            }), 200
+        else:
+            return jsonify({
+                'status': 'unhealthy',
+                'database': 'disconnected'
+            }), 500
+    except Exception as e:
+        logger.error(f"Health check error: {e}")
+        return jsonify({'error': 'Health check failed'}), 500
 
-        # Check if username is already existed
+
+@app.route('/register', methods=['POST'])
+def register():
+    """Register a new user."""
+    data, error_response, status_code = validate_json_request(['username', 'password'])
+    if error_response:
+        return jsonify(error_response), status_code
+
+    username = data['username'].strip()
+    password = data['password']
+
+    try:
+        # Check if username exists
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
-            return jsonify({
-                'Success': False,
-                'message': 'Username already exists'
-            }), 409
+            return jsonify({'error': 'Username already exists'}), 409
 
-        # Hash password and create user
-        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        # Create user (no restrictions)
+        password_hash = bcrypt.hashpw(
+            password.encode('utf-8'),
+            bcrypt.gensalt()
+        ).decode('utf-8')
 
-        new_user = User(username=username, password=password_hash)
+        new_user = User(username=username, password_hash=password_hash)
         db.session.add(new_user)
         db.session.commit()
 
-        return jsonify({
-            'Success': True,
-            'message': 'User registered successfully'
-        }), 201
+        logger.info(f"User registered: {username}")
+        return jsonify({'message': 'Registration successful'}), 201
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({
-            'Success': False,
-            'message': f'Registration failed: {str(e)}'
-        }), 500
+        logger.error(f"Registration error: {e}")
+        return jsonify({'error': 'Registration failed'}), 500
 
 
 @app.route('/login', methods=['POST'])
 def login():
-    """
-        Authenticate a user.
+    """Login user."""
+    data, error_response, status_code = validate_json_request(['username', 'password'])
+    if error_response:
+        return jsonify(error_response), status_code
 
-        Expected JSON body:
-            - username: User's username (string)
-            - password: User's password (string)
+    username = data['username'].strip()
+    password = data['password']
 
-        Returns:
-            JSON response with success status or error message
-    """
     try:
-        data = request.get_json()
-
-        # Validate input
-        if not data:
-            return jsonify({
-                'Success': False,
-                'message': 'Missing data'
-            }), 400
-
-        username = data.get('username', '').script()
-        password = data.get('password', '')
-
-        # Check for empty data
-        if not username or not password:
-            return jsonify({
-                'Success': False,
-                'message': 'Username and password are required'
-            }), 400
-
         # Find user
         user = User.query.filter_by(username=username).first()
         if not user:
-            return jsonify({
-                'Success': False,
-                'message': 'Username does not exist'
-            }), 401
+            return jsonify({'error': 'Invalid username or password'}), 401
 
         # Verify password
-        if not bcrypt.checkpw(password.encode('utf-8'),  User.password_hash.encode('utf-8')):
-            return jsonify({
-                'Success': False,
-                'message': 'Password does not match'
-            }), 401
+        if not bcrypt.checkpw(password.encode('utf-8'), user.password_hash.encode('utf-8')):
+            return jsonify({'error': 'Invalid username or password'}), 401
 
+        logger.info(f"User logged in: {username}")
         return jsonify({
-            'Success': True,
-            'message': 'Login successful'
+            'message': 'Login successful',
+            'username': username
         }), 200
 
     except Exception as e:
-        return jsonify({
-            'Success': False,
-            'message': f'Login failed: {str(e)}'
-        }), 500
+        logger.error(f"Login error: {e}")
+        return jsonify({'error': 'Login failed'}), 500
 
-"""
-SocketIO events
-"""
+
+# ==================== SocketIO Handlers ====================
 
 @socketio.on('connect')
 def handle_connect():
-    """Handle new user connection."""
-    session_id = getattr(request, 'sid', None)
-    print(f"Client connected: {session_id}")
+    """Handle new client connection."""
+    session_id = request.sid
+    logger.info(f"Client connected: {session_id}")
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    """Handle a user disconnection and notify other users."""
-    session_id = getattr(request, 'sid', None)
+    """Handle client disconnection."""
+    session_id = request.sid
 
-    if session_id not in connect_users:
-        username = connect_users[session_id]
-        del connect_users[session_id]
+    if session_id in connected_users:
+        username = connected_users[session_id]
+        del connected_users[session_id]
 
-        # Notify all user that someone has left
+        # Notify all users
         emit('user_left', {
             'username': username,
-            'message': f'User {username} has left the chatroom.'
+            'message': f'{username} left the chat'
         }, broadcast=True)
 
-        print(f"Client disconnected: {session_id}")
+        logger.info(f"User disconnected: {username}")
 
 
 @socketio.on('join')
 def handle_join(data):
-    """
-        Handle user joining the chatroom.
-
-        Args:
-            data: Dictionary containing 'username'
-    """
-    username = data.get('username')
-    session_id = getattr(request, 'sid', None)
+    """Handle user joining chat."""
+    session_id = request.sid
+    username = data.get('username', '').strip()
 
     if not username:
-        emit('error', {'message': 'Missing username'})
+        emit('error', {'message': 'Username is required'})
         return
 
-    # Store user session
-    connect_users[session_id] = username
+    # Store user
+    connected_users[session_id] = username
 
-    # Get recent messages for the user
-    recent_messages = Messages.query.order_by(Messages.timestamp.desc()).limit(50).all()
+    try:
+        # Send recent messages
+        recent_messages = Message.query.order_by(Message.timestamp.asc()).limit(50).all()
+        messages_data = [msg.to_dict() for msg in recent_messages]
+        emit('message_history', {'messages': messages_data})
 
-    # Send recent messages to the joining user (reversed to show oldest first)
-    messages_list = [msg.to_dict() for msg in reversed(recent_messages)]
-    emit('message_history', {'messages': messages_list})
+        # Notify all users
+        emit('user_joined', {
+            'username': username,
+            'message': f'{username} joined the chat'
+        }, broadcast=True)
 
-    # Notify all users that a new user has joined
-    emit('user_joined', {
-        'username': username,
-        'messages': f'{username} has joined the chatroom.'
-    }, broadcast=True)
+        logger.info(f"User joined: {username}")
 
-    print(f"Client joined: {username}")
+    except Exception as e:
+        logger.error(f"Failed to load messages: {e}")
+        emit('error', {'message': 'Failed to load chat history'})
 
 
 @socketio.on('send_message')
 def handle_send_message(data):
-    """
-        Handle incoming message from a client.
+    """Handle incoming message."""
+    session_id = request.sid
 
-        Args:
-            data: Dictionary containing 'content'
-    """
-    session_id = getattr(request, 'sid', None)
-
-    # Check if user is logged in
-    if session_id not in connect_users:
-        emit('error', {'message': 'You must join the chat first'})
+    # Check if user is connected
+    if session_id not in connected_users:
+        emit('error', {'message': 'Please join the chat first'})
         return
 
-    username = connect_users[session_id]
+    username = connected_users[session_id]
     content = data.get('content', '').strip()
 
     if not content:
@@ -231,44 +223,60 @@ def handle_send_message(data):
         return
 
     try:
-        # Save message to database
-        new_message = Messages(username=username, content=content)
+        # Save message
+        new_message = Message(username=username, content=content)
         db.session.add(new_message)
         db.session.commit()
 
-        # Broadcast message to all connect clients
+        # Broadcast message
         emit('new_message', new_message.to_dict(), broadcast=True)
+
+        logger.info(f"Message from {username}: {content[:50]}")
 
     except Exception as e:
         db.session.rollback()
-        emit('error', {'message': f'Failed to send message: {str(e)}' })
+        logger.error(f"Failed to save message: {e}")
+        emit('error', {'message': 'Failed to send message'})
 
 
 @socketio.on('get_online_users')
-def handle_get_online_users():
-    """Send list of currently online users to the requesting client."""
-    online_users = list(connect_users.values())
-    emit('online_users', {'users': online_users})
+def handle_online_users():
+    """Send list of online users."""
+    try:
+        users = list(set(connected_users.values()))
+        emit('online_users', {'users': users})
+    except Exception as e:
+        logger.error(f"Failed to get online users: {e}")
+        emit('error', {'message': 'Failed to get online users'})
 
 
-"""
-Error Handlers
-"""
+# ==================== Error Handlers ====================
 
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors."""
-    return jsonify({'success': False, 'message': 'Not found'}), 404
+    return jsonify({'error': 'Resource not found'}), 404
 
 
 @app.errorhandler(500)
 def internal_error(error):
     """Handle 500 errors."""
     db.session.rollback()
-    return jsonify({'success': False, 'message': 'Internal server error'}), 500
+    return jsonify({'error': 'Internal server error'}), 500
 
-"""Main entry point"""
+
+# ==================== Main Entry Point ====================
+
 if __name__ == '__main__':
-    print("Starting Terminal Chatroom Server")
-    print("Server running on http://localhost:5050")
-    socketio.run(app, host='0.0.0.0', post=5050, debug=True)
+    print("=" * 50)
+    print("Chat Server Starting")
+    print("=" * 50)
+    print("Server URL: http://localhost:5050")
+    print("Health check: http://localhost:5050/health")
+    print("=" * 50)
+
+    try:
+        socketio.run(app, host='0.0.0.0', port=5050, debug=True)
+    except Exception as e:
+        logger.error(f"Failed to start server: {e}")
+        print(f"Error: {e}")

@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  chat-server:
+    build: ./server
+    container_name: chat-server
+    ports:
+      - "5050:5050"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=app.py
+    volumes:
+      - ./server/data:/app/data
+      - ./server/logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - chat-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5050/health', timeout=2)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  chat-client:
+    build: ./client
+    container_name: chat-client
+    stdin_open: true
+    tty: true
+    environment:
+      - SERVER_URL=http://chat-server:5050
+    depends_on:
+      chat-server:
+        condition: service_healthy
+    networks:
+      - chat-network
+
+networks:
+  chat-network:
+    driver: bridge

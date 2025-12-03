@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  chat-client:
+    build: ./client
+    container_name: chat-client
+    environment:
+      - SERVER_URL=http://chat-server:5050
+    stdin_open: true  # Keep STDIN open for interactive input
+    tty: true         # Allocate pseudo-TTY for interactive mode
+    depends_on:
+      - chat-server
+    networks:
+      - chat-network
+
+  chat-server:
+    build: ./server
+    container_name: chat-server
+    ports:
+      - "5050:5050"
+    environment:
+      - FLASK_ENV=production
+    volumes:
+      - ./server/data:/app/data
+    networks:
+      - chat-network
+
+networks:
+  chat-network:
+    driver: bridge

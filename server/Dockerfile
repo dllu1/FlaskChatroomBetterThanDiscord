@@ -1,26 +1,39 @@
-# Use Python 3.11 slim image as base
+# Server Dockerfile
 FROM python:3.11-slim
 
-# Set working directory inside container
+# Set working directory
 WORKDIR /app
 
 # Set environment variables
-# Prevents Python from writing .pyc files
 ENV PYTHONDONTWRITEBYTECODE=1
-# Prevents Python from buffering stdout/stderr
 ENV PYTHONUNBUFFERED=1
+ENV FLASK_APP=app.py
+ENV FLASK_ENV=production
 
-# Copy requirements first (for better caching)
+# Install system dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install dependencies
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all server files
+# Copy application code
 COPY . .
 
-# Expose the port the server runs on
+# Create non-root user
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# Expose port
 EXPOSE 5050
 
-# Command to run the server
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:5050/health', timeout=2)"
+
+# Run the application
 CMD ["python", "app.py"]

@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  chat-server:
+    build: .
+    container_name: chat-server
+    ports:
+      - "5050:5050"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=app.py
+      - DATABASE_URL=sqlite:///chatroom.db
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    depends_on:
+      - postgres  # Optional: if using PostgreSQL
+    networks:
+      - chat-network
+
+  # Optional PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    container_name: chat-db
+    environment:
+      - POSTGRES_USER=chat_user
+      - POSTGRES_PASSWORD=chat_password
+      - POSTGRES_DB=chatroom
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - chat-network
+
+volumes:
+  postgres_data:
+  data:
+
+networks:
+  chat-network:
+    driver: bridge

@@ -18,7 +18,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'super_duper_secret_key'
 
 # Initialize SocketIO with gevent for async support
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode=gevent)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 # Initialize database
 init_database(app)
@@ -49,7 +49,7 @@ def register():
         if not data:
             return jsonify({'Success': False, 'message': 'Missing data'}), 400
 
-        username = data.get('username', '').script()
+        username = data.get('username', '').strip()
         password = data.get('password', '')
 
         # Check for empty data
@@ -109,7 +109,7 @@ def login():
                 'message': 'Missing data'
             }), 400
 
-        username = data.get('username', '').script()
+        username = data.get('username', '').strip()
         password = data.get('password', '')
 
         # Check for empty data
@@ -128,7 +128,7 @@ def login():
             }), 401
 
         # Verify password
-        if not bcrypt.checkpw(password.encode('utf-8'),  User.password_hash.encode('utf-8')):
+        if not bcrypt.checkpw(password.encode('utf-8'), user.password.encode('utf-8')):
             return jsonify({
                 'Success': False,
                 'message': 'Password does not match'
@@ -161,7 +161,7 @@ def handle_disconnect():
     """Handle a user disconnection and notify other users."""
     session_id = getattr(request, 'sid', None)
 
-    if session_id not in connect_users:
+    if session_id in connect_users:
         username = connect_users[session_id]
         del connect_users[session_id]
 
@@ -202,7 +202,7 @@ def handle_join(data):
     # Notify all users that a new user has joined
     emit('user_joined', {
         'username': username,
-        'messages': f'{username} has joined the chatroom.'
+        'message': f'{username} has joined the chatroom.'
     }, broadcast=True)
 
     print(f"Client joined: {username}")
@@ -271,4 +271,4 @@ def internal_error(error):
 if __name__ == '__main__':
     print("Starting Terminal Chatroom Server")
     print("Server running on http://localhost:5050")
-    socketio.run(app, host='0.0.0.0', post=5050, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5050, debug=True)

@@ -1,0 +1,38 @@
+services:
+  chat-server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: chat-server
+    ports:
+      - "5050:5050"
+    environment:
+      - FLASK_ENV=production
+    volumes:
+      # Persist the SQLite database file
+      - sqlite_data:/app/instance
+    networks:
+      - chat-network
+    restart: unless-stopped
+
+  chat-client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: chat-client
+    environment:
+      - SERVER_URL=http://chat-server:5050
+    stdin_open: true   # Keep STDIN open for interactive input
+    tty: true          # Allocate pseudo-TTY for interactive mode
+    depends_on:
+      - chat-server
+    networks:
+      - chat-network
+
+networks:
+  chat-network:
+    driver: bridge
+
+volumes:
+  sqlite_data:
+    driver: local
